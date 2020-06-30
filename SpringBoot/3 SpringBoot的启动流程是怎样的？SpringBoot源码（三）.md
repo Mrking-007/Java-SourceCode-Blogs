@@ -1,18 +1,13 @@
 
 # 1 温故而知新
-本篇接 [SpringBoot内置的各种Starter是怎样构建的？  SpringBoot源码（六）](https://github.com/yuanmabiji/Java-SourceCode-Blogs/blob/master/SpringBoot/6%20SpringBoot%E5%86%85%E7%BD%AE%E7%9A%84%E5%90%84%E7%A7%8DStarter%E6%98%AF%E6%80%8E%E6%A0%B7%E6%9E%84%E5%BB%BA%E7%9A%84%EF%BC%9F%20%20SpringBoot%E6%BA%90%E7%A0%81%EF%BC%88%E5%85%AD%EF%BC%89.md)
+本篇接
+[如何分析SpringBoot源码模块及结构？--SpringBoot源码（二）](https://github.com/yuanmabiji/Java-SourceCode-Blogs/blob/master/SpringBoot/2%20%E5%A6%82%E4%BD%95%E5%88%86%E6%9E%90SpringBoot%E6%BA%90%E7%A0%81%E6%A8%A1%E5%9D%97%E5%8F%8A%E7%BB%93%E6%9E%84%EF%BC%9F%20%20SpringBoot%E6%BA%90%E7%A0%81%EF%BC%88%E4%BA%8C%EF%BC%89.md)
 
-温故而知新，我们来简单回顾一下上篇的内容，上一篇我们分析了**SpringBoot内置的各种Starter是怎样构建的?**，现将关键点重新回顾总结下：
 
-1. `spring-boot-starter-xxx`起步依赖没有一行代码，而是直接或间接依赖了`xxx-autoconfigure`模块，而`xxx-autoconfigure`模块承担了`spring-boot-starter-xxx`起步依赖自动配置的实现；
-2. `xxx-autoconfigure`自动配置模块引入了一些可选依赖，这些可选依赖不会被传递到`spring-boot-starter-xxx`起步依赖中，这是起步依赖构建的**关键点**；
-3. `spring-boot-starter-xxx`起步依赖**显式**引入了一些对自动配置起作用的可选依赖，因此会触发 `xxx-autoconfigure`自动配置的逻辑（比如创建某些符合条件的配置`bean`）；
-4. 经过前面3步的准备，我们项目只要引入了某个起步依赖后，就可以开箱即用了，而不用手动去创建一些`bean`等。
+上一篇分析了SpringBoot源码结构及各个模块pom之间的关系后，那么此篇开始就开始解开SpringBoot新特性之一--自动配置的神秘面纱了。因为SpringBoot自动配置原理是基于其大量的条件注解`ConditionalOnXXX`，因此，本节我们先来撸下Spring的条件注解的相关源码。
 
 # 2 引言
-本来这篇文章会继续SpringBoot自动配置的源码分析的，想分析下`spring-boot-starter-web`的自动配置的源码是怎样的的。但是考虑到`spring-boot-starter-web`的自动配置逻辑跟内置`Tomcat`等有关，因此想以后等分析了SpringBoot的内置`Tomcat`的相关源码后再来继续分析`spring-boot-starter-web`的自动配置的源码。
-
-因此，本篇我们来探究下**SpringBoot的启动流程是怎样的？**
+本篇我们来探究下**SpringBoot的启动流程是怎样的？**
 # 3 如何编写一个SpringBoot启动类
 我们都知道，我们运行一个SpringBoot项目，引入相关`Starters`和相关依赖后，再编写一个启动类，然后在这个启动类标上`@SpringBootApplication`注解，然后就可以启动运行项目了，如下代码：
 ```java

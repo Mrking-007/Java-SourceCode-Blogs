@@ -1,6 +1,3 @@
-
-本篇接 [SpringBoot的启动流程是怎样的？SpringBoot源码（七）](https://github.com/yuanmabiji/Java-SourceCode-Blogs/blob/master/SpringBoot/7%20SpringBoot%E7%9A%84%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B%E6%98%AF%E6%80%8E%E6%A0%B7%E7%9A%84%EF%BC%9FSpringBoot%E6%BA%90%E7%A0%81%EF%BC%88%E4%B8%83%EF%BC%89.md)
-
 # 1 温故而知新
 
 温故而知新，我们来简单回顾一下上篇的内容，上一篇我们分析了**SpringBoot的启动流程**，现将关键步骤再浓缩总结下：
@@ -190,7 +187,7 @@ private Class<?> deduceMainApplicationClass() {
 
 # 4 SpringBoot的SPI机制原理解读
 
-由于SpringBoot的SPI机制是一个很重要的知识点，因此这里单独一小节来分析。我们都知道，SpringBoot没有使用Java的SPI机制(Java的SPI机制可以看看笔者的[Java是如何实现自己的SPI机制的？](https://juejin.im/post/5e7c26a76fb9a009a441757c),真的是干货满满)，而是自定义实现了一套自己的SPI机制。SpringBoot利用自定义实现的SPI机制可以加载初始化器实现类，监听器实现类和自动配置类等等。如果我们要添加自动配置类或自定义监听器，那么我们很重要的一步就是在`spring.factories`中进行配置，然后才会被SpringBoot加载。
+由于SpringBoot的SPI机制是一个很重要的知识点，因此这里单独一小节来分析。我们都知道，SpringBoot没有使用Java的SPI机制(Java的SPI机制可以看看笔者的[Java是如何实现自己的SPI机制的？](https://juejin.im/post/5e7c26a76fb9a009a441757c),真的是干货满满)，而是自定义实现了一套自己的SPI机制。SpringBoot利用自定义实现的SPI机制可以**加载初始化器实现类，监听器实现类和自动配置类**等等。如果我们要添加自动配置类或自定义监听器，那么我们很重要的一步就是在`spring.factories`中进行配置，然后才会被SpringBoot加载。
 
 好了，那么接下来我们就来重点分析下**SpringBoot是如何是实现自己的SPI机制的**。
 
@@ -431,3 +428,8 @@ private <T> List<T> createSpringFactoriesInstances(Class<T> type,
 
 注：该源码分析对应SpringBoot版本为**2.1.0.RELEASE**，本文对应的SpringBoot源码解析项目github地址：https://github.com/yuanmabiji/spring-boot-2.1.0.RELEASE
 
+## 7 技术引用参考
+
++  [commaDelimitedListToStringArray](https://blog.csdn.net/weixin_30576859/article/details/95452202)
+
+* [MultiValueMap](https://blog.csdn.net/zty1317313805/article/details/80096498)

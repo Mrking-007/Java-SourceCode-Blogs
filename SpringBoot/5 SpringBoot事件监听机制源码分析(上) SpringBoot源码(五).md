@@ -1,11 +1,3 @@
-**SpringBoot中文注释项目Github地址：**
-
-https://github.com/yuanmabiji/spring-boot-2.1.0.RELEASE
-
-
-
-本篇接 [SpringApplication对象是如何构建的？ SpringBoot源码（八）](https://juejin.im/post/5e82bac9518825737a314096)
-
 # 1 温故而知新
 温故而知新，我们来简单回顾一下上篇的内容，上一篇我们分析了**SpringApplication对象的构建过程及SpringBoot自己实现的一套SPI机制**，现将关键步骤再浓缩总结下：
 1. `SpringApplication`对象的构造过程其实就是给`SpringApplication`类的**6**个成员变量赋值；
@@ -80,7 +72,7 @@ public ConfigurableApplicationContext run(String... args) {
 ```
 可以看到SpringBoot在启动过程中首先会先新建一个`SpringApplicationRunListeners`对象用于发射SpringBoot启动过程中的各种生命周期事件，比如发射`ApplicationStartingEvent`,`ApplicationEnvironmentPreparedEvent`和`ApplicationContextInitializedEvent`等事件，然后相应的监听器会执行一些SpringBoot启动过程中的初始化逻辑。那么，监听这些SpringBoot的生命周期事件的监听器们是何时被加载实例化的呢？还记得上篇文章在分析`SpringApplication`的构建过程吗？没错，这些执行初始化逻辑的监听器们正是在`SpringApplication`的构建过程中根据`ApplicationListener`接口去`spring.factories`配置文件中加载并实例化的。
 # 3.1 为广播SpringBoot内置生命周期事件做前期准备
-# 3.1.1 加载ApplicationListener监听器实现类
+## 3.1.1 加载ApplicationListener监听器实现类
 我们再来回顾下[SpringApplication对象是如何构建的？ SpringBoot源码（八）](https://juejin.im/post/5e82bac9518825737a314096)一文中讲到在构建`SpringApplication`对象时的`setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));`这句代码。
 
 这句代码做的事情就是从`spring.factories`中加载出`ApplicationListener`事件监听接口的SPI扩展实现类然后添加到`SpringApplication`对象的`listeners`集合中，用于后续监听SpringBoot启动过程中的事件，来执行一些初始化逻辑工作。
@@ -94,7 +86,7 @@ SpringBoot启动时的具体监听器们都实现了`ApplicationListener`接口�
 
 ![](https://user-gold-cdn.xitu.io/2020/4/13/17170eb8ae034bbd?w=712&h=584&f=png&s=53731)
 
-# 3.1.2 加载SPI扩展类EventPublishingRunListener
+## 3.1.2 加载SPI扩展类EventPublishingRunListener
 前面讲到，在SpringBoot的启动过程中首先会先新建一个`SpringApplicationRunListeners`对象用于发射SpringBoot启动过程中的生命周期事件，即我们现在来看下`SpringApplicationRunListeners listeners = getRunListeners(args);`这句代码：
 
 ```java
@@ -116,7 +108,7 @@ private SpringApplicationRunListeners getRunListeners(String[] args) {
 			
 ![](https://user-gold-cdn.xitu.io/2020/4/18/1718d054c88bebb9?w=692&h=117&f=png&s=13088)
 由上图可以看到，`SpringApplicationRunListener`只有`EventPublishingRunListener`这个SPI实现类
-`EventPublishingRunListener`这个哥们在SpringBoot的启动过程中尤其重要，由其在SpringBoot启动过程的不同阶段发射不同的SpringBoot的生命周期事件，**即`SpringApplicationRunListeners`对象没有承担广播事件的职责，而最终是委托`EventPublishingRunListener`这个哥们来广播事件的。**
+`EventPublishingRunListener`这个哥们在SpringBoot的启动过程中尤其重要，尤其在SpringBoot启动过程的不同阶段发射不同的SpringBoot的生命周期事件，**即`SpringApplicationRunListeners`对象没有承担广播事件的职责，而最终是委托`EventPublishingRunListener`这个哥们来广播事件的。**
 
 因为从`spring.factories`中加载`EventPublishingRunListener`类后还会实例化该类，那么我们再跟进`EventPublishingRunListener`的源码，看看其是如何承担发射SpringBoot生命周期事件这一职责的？
 ```java
@@ -263,7 +255,7 @@ public EventPublishingRunListener(SpringApplication application, String[] args) 
 可以看到在`EventPublishingRunListener`的构造函数中有一个`for`循环会遍历之前从`spring.factories`中加载的监听器们，然后添加到集合中缓存起来，用于以后广播各种事件时直接从这个集合中取出来即可，而不用再去`spring.factories`中加载，提高效率。
 
 # 3.2 广播SpringBoot的内置生命周期事件
-从`spring.factories`配置文件中加载并实例化`EventPublishingRunListener`对象后，那么在在SpringBoot的启动过程中会发射一系列SpringBoot内置的生命周期事件，我们再来回顾下SpringBoot启动过程中的源码：
+从`spring.factories`配置文件中加载并实例化`EventPublishingRunListener`对象后，那么在SpringBoot的启动过程中会发射一系列SpringBoot内置的生命周期事件，我们再来回顾下SpringBoot启动过程中的源码：
 ```java
 // SpringApplication.java
 

@@ -22,7 +22,7 @@ https://github.com/yuanmabiji/spring-boot-2.1.0.RELEASE
 3. 其次SpringBoot的生命周期事件基类`SpringApplicationEvent`继承了Spring的事件基类`ApplicationEvent`；
 4. 最后SpringBoot具体的7个生命周期事件类再继承了SpringBoot的生命周期事件基类`SpringApplicationEvent`。
 
-# 3.1 JDK的事件基类EventObject
+## 3.1 JDK的事件基类EventObject
 `EventObject`类是JDK的事件基类，可以说是所有Java事件类的基本，即所有的Java事件类都直接或间接继承于该类，源码如下：
 ```java
 // EventObject.java
@@ -65,8 +65,9 @@ public class EventObject implements java.io.Serializable {
 }
 ```
 可以看到`EventObject`类只有一个属性`source`，这个属性是用来记录最初事件是发生在哪个类，举个栗子，比如在SpringBoot启动过程中会发射`ApplicationStartingEvent`事件，而这个事件最初是在`SpringApplication`类中发射的，因此`source`就是`SpringApplication`对象。
-# 3.2 Spring的事件基类ApplicationEvent
+## 3.2 Spring的事件基类ApplicationEvent
 `ApplicationEvent`继承了DK的事件基类`EventObject`类，是Spring的事件基类，被所有Spring的具体事件类继承，源码如下：
+
 ```java
 // ApplicationEvent.java
 
@@ -99,8 +100,9 @@ public abstract class ApplicationEvent extends EventObject {
 }
 ```
 可以看到`ApplicationEvent`有且仅有一个属性`timestamp`，该属性是用来记录事件发生的时间。
-# 3.3 SpringBoot的事件基类SpringApplicationEvent
+## 3.3 SpringBoot的事件基类SpringApplicationEvent
 `SpringApplicationEvent`类继承了Spring的事件基类`ApplicationEvent`，是所有SpringBoot内置生命周期事件的父类，源码如下：
+
 ```java
 
 /**
@@ -124,9 +126,9 @@ public abstract class SpringApplicationEvent extends ApplicationEvent {
 }
 ```
 可以看到`SpringApplicationEvent`有且仅有一个属性`args`，该属性就是SpringBoot启动时的命令行参数即标注`@SpringBootApplication`启动类中`main`函数的参数。
-# 3.4 SpringBoot具体的生命周期事件类
+## 3.4 SpringBoot具体的生命周期事件类
 接下来我们再来看一下`SpringBoot`内置生命周期事件即`SpringApplicationEvent`的具体子类们。
-# 3.4.1 ApplicationStartingEvent
+### 3.4.1 ApplicationStartingEvent
 
 ```java
 // ApplicationStartingEvent.java
@@ -137,8 +139,8 @@ public class ApplicationStartingEvent extends SpringApplicationEvent {
 	}
 }
 ```
-SpringBoot开始启动时便会发布`ApplicationStartingEvent`事件，其发布时机在环境变量Environment或容器ApplicationContext创建前但在注册`ApplicationListener`具体监听器之后，标志标志`SpringApplication`开始启动。
-# 3.4.2 ApplicationEnvironmentPreparedEvent
+SpringBoot开始启动时便会发布`ApplicationStartingEvent`事件，其发布时机在环境变量Environment或容器ApplicationContext创建前但在注册`ApplicationListener`具体监听器之后，标志`SpringApplication`开始启动。
+### 3.4.2 ApplicationEnvironmentPreparedEvent
 ```java
 // ApplicationEnvironmentPreparedEvent.java
 
@@ -172,7 +174,7 @@ public class ApplicationEnvironmentPreparedEvent extends SpringApplicationEvent 
 
 监听`ApplicationEnvironmentPreparedEvent`事件的第一个监听器是`ConfigFileApplicationListener`，因为是`ConfigFileApplicationListener`监听器还要为环境变量`Environment`增加`application.properties`配置文件中的环境变量；此后还有一些也是监听`ApplicationEnvironmentPreparedEvent`事件的其他监听器监听到此事件时，此时可以说环境变量`Environment`几乎已经完全准备好了。
 > **思考：** 监听同一事件的监听器们执行监听逻辑时是有顺序的，我们可以想一下这个排序逻辑是什么时候排序的？还有为什么要这样排序呢？
-# 3.4.3 ApplicationContextInitializedEvent
+### 3.4.3 ApplicationContextInitializedEvent
 ```java
 // ApplicationContextInitializedEvent.java
 
@@ -204,7 +206,7 @@ public class ApplicationContextInitializedEvent extends SpringApplicationEvent {
 
 > **扩展：** 可以看到`ApplicationContextInitializedEvent`是在为`context`容器配置`environment`变量后触发，此时`ApplicationContextInitializedEvent`等事件只要有`context`容器的话，那么其他需要`environment`环境变量的监听器只需要从`context`中取出`environment`变量即可，从而`ApplicationContextInitializedEvent`等事件没必要再配置`environment`属性。
 
-# 3.4.4 ApplicationPreparedEvent
+### 3.4.4 ApplicationPreparedEvent
 
 ```java
 // ApplicationPreparedEvent.java
@@ -237,7 +239,7 @@ public class ApplicationPreparedEvent extends SpringApplicationEvent {
 3. 通过`context`属性取出`Environment`环境变量，然后就可以操作环境变量，比如`PropertiesMigrationListener`。
 
 `ApplicationPreparedEvent`事件在`ApplicationContext`容器已经完全准备好时但在容器刷新前触发，在这个阶段`bean`定义已经加载完毕还有`environment`已经准备好可以用了。
-# 3.4.5 ApplicationStartedEvent
+### 3.4.5 ApplicationStartedEvent
 ```java
 // ApplicationStartedEvent.java
 
@@ -266,7 +268,7 @@ public class ApplicationStartedEvent extends SpringApplicationEvent {
 `ApplicationStartedEvent`事件将在容器刷新后但`ApplicationRunner`和`CommandLineRunner`的`run`方法执行前触发，标志`Spring`容器已经刷新，此时容器已经准备完毕了。
 
 > **扩展：** 这里提到了`ApplicationRunner`和`CommandLineRunner`接口有啥作用呢？我们一般会在`Spring`容器刷新完毕后，此时可能有一些系统参数等静态数据需要加载，此时我们就可以实现了`ApplicationRunner`或`CommandLineRunner`接口来实现静态数据的加载。
-# 3.4.6 ApplicationReadyEvent
+### 3.4.6 ApplicationReadyEvent
 ```java
 // ApplicationReadyEvent.java
 
@@ -293,7 +295,7 @@ public class ApplicationReadyEvent extends SpringApplicationEvent {
 }
 ```
 `ApplicationReadyEvent`事件在调用完`ApplicationRunner`和`CommandLineRunner`的`run`方法后触发，此时标志`SpringApplication`已经正在运行。
-# 3.4.7 ApplicationFailedEvent
+### 3.4.7 ApplicationFailedEvent
 
 ```java
 // ApplicationFailedEvent.java

@@ -2,8 +2,6 @@
 
 # 1 前言
 
-本篇接 [SpringBoot是如何实现自动配置的？--SpringBoot源码（四）](https://github.com/yuanmabiji/Java-SourceCode-Blogs/blob/master/SpringBoot/4%20SpringBoot%E6%98%AF%E5%A6%82%E4%BD%95%E5%AE%9E%E7%8E%B0%E8%87%AA%E5%8A%A8%E9%85%8D%E7%BD%AE%E7%9A%84%EF%BC%9F%20%20SpringBoot%E6%BA%90%E7%A0%81%EF%BC%88%E5%9B%9B%EF%BC%89.md)
-
 温故而知新，我们来简单回顾一下上篇的内容，上一篇我们分析了SpringBoot的自动配置的相关源码，自动配置相关源码主要有以下几个重要的步骤：
 
 1. 从spring.factories配置文件中加载自动配置类；
@@ -22,7 +20,11 @@
 
 > 举个栗子：以配置web项目的服务器端口为例，若我们要将服务器端口配置为`8081`，那么我们会在`application.properties`配置文件中配置`server.port=8081`，此时该配置值`8081`就将会绑定到被`@ConfigurationProperties`注解的类`ServerProperties`的属性`port`上，从而使得配置生效。
 
+https://www.jianshu.com/p/7f54da1cb2eb
 
+https://blog.csdn.net/zknxx/article/details/79183698
+
+https://segmentfault.com/a/1190000018987185?utm_source=tag-newest
 
 
 
@@ -100,6 +102,7 @@ public @interface EnableConfigurationProperties {
 ```
 
 `@EnableConfigurationProperties`注解的主要作用就是为`@ConfigurationProperties`注解标注的类提供支持，即对将外部配置属性值（比如application.properties配置值）绑定到`@ConfigurationProperties`标注的类的属性中。
+
 > **注意**：SpringBoot源码中还存在了`ConfigurationPropertiesAutoConfiguration`这个自动配置类，同时`spring.factories`配置文件中的`EnableAutoConfiguration`接口也配置了`ConfigurationPropertiesAutoConfiguration`，这个自动配置类上也有`@EnableConfigurationProperties`这个注解，堆属性绑定进行了默认开启。
 
 **那么，`@EnableConfigurationProperties`这个注解对属性绑定提供怎样的支持呢？**
@@ -147,11 +150,11 @@ class EnableConfigurationPropertiesImportSelector implements ImportSelector {
 public static class ConfigurationPropertiesBeanRegistrar
 			implements ImportBeanDefinitionRegistrar {
 	@Override
-	public void registerBeanDefinitions(AnnotationMetadata metadata,  // metadata是AnnotationMetadataReadingVisitor对象，存储了某个配置类的元数据
-			BeanDefinitionRegistry registry) {
-		// （1）得到@EnableConfigurationProperties注解的所有属性值,
-		// 比如@EnableConfigurationProperties(ServerProperties.class),那么得到的值是ServerProperties.class
-		// （2）然后再将得到的@EnableConfigurationProperties注解的所有属性值注册到容器中
+	public void registerBeanDefinitions(AnnotationMetadata metadata,BeanDefinitionRegistry registry) {
+      // metadata是AnnotationMetadataReadingVisitor对象，存储了某个配置类的元数据
+		  //（1）得到@EnableConfigurationProperties注解的所有属性值,
+		  // 比如@EnableConfigurationProperties(ServerProperties.class),那么得到的值是ServerProperties.class
+	  	//（2）然后再将得到的@EnableConfigurationProperties注解的所有属性值注册到容器中
 		getTypes(metadata).forEach((type) -> register(registry,
 				(ConfigurableListableBeanFactory) registry, type));
 	}
@@ -240,7 +243,6 @@ public class ConfigurationPropertiesBindingPostProcessorRegistrar
 
 }
 ```
-
 
 `ConfigurationPropertiesBindingPostProcessorRegistrar`类的逻辑非常简单，主要用来注册外部配置属性绑定相关的后置处理器即`ConfigurationBeanFactoryMetadata`和`ConfigurationPropertiesBindingPostProcessor`。
 

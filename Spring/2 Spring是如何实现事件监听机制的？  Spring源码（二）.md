@@ -502,7 +502,9 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 小结：这篇文章是本人第二篇源码解析的文章，写作速度仍然很慢，希望以后思路捋清楚后能快点写完，加油。
 
+/Users/zhangyuhang/Library/Application Support/JetBrains/IntelliJIdea2020.1/plugins
 
+/Users/zhangyuhang/Library/Application Support/JetBrains/IntelliJIdea2020.1/port
 
 参考:
 

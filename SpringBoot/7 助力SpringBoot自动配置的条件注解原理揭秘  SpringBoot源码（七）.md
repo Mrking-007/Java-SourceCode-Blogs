@@ -1,10 +1,11 @@
 # 1 前言
-本篇接
-[如何分析SpringBoot源码模块及结构？--SpringBoot源码（二）](https://github.com/yuanmabiji/Java-SourceCode-Blogs/blob/master/SpringBoot/2%20%E5%A6%82%E4%BD%95%E5%88%86%E6%9E%90SpringBoot%E6%BA%90%E7%A0%81%E6%A8%A1%E5%9D%97%E5%8F%8A%E7%BB%93%E6%9E%84%EF%BC%9F%20%20SpringBoot%E6%BA%90%E7%A0%81%EF%BC%88%E4%BA%8C%EF%BC%89.md)
+上一篇描述了SpringBoot启动流程(`SpringApplication`对象`run`方法，方法体执行过程)中涉及到的7个发布事件
 
+![](https://user-gold-cdn.xitu.io/2020/5/2/171d300d55cc4470?w=796&h=769&f=png&s=378851)
 
-上一篇分析了SpringBoot源码结构及各个模块pom之间的关系后，那么此篇开始就开始解开SpringBoot新特性之一--自动配置的神秘面纱了。因为SpringBoot自动配置原理是基于其大量的条件注解`ConditionalOnXXX`，因此，本节我们先来撸下Spring的条件注解的相关源码。
+从本篇开始我们将开始解读`@SpringBootApplication`中`@EnableAutoConfiguration`知识体系，本篇先分析自动配置类相关注解
 # 2 SpringBoot的派生条件注解
+
 我们都知道，SpringBoot自动配置是需要满足相应的条件才会自动配置,因此SpringBoot的自动配置大量应用了条件注解`ConditionalOnXXX`。如下图：
 
 
@@ -595,10 +596,12 @@ private ConditionOutcome isServletWebApplication(ConditionContext context) {
 
 参考：
 
-1，[spring 自动配置（上） 配置文件和插件解读](https://www.jianshu.com/p/e575fddb6cb1)
+1、[spring 自动配置（上） 配置文件和插件解读](https://www.jianshu.com/p/e575fddb6cb1)
 
-2，[SpringBoot内置条件注解](https://blog.csdn.net/jdfk423/article/details/82940949)
+2、[SpringBoot内置条件注解](https://blog.csdn.net/jdfk423/article/details/82940949)
 
-3，[spring boot 系列之六：深入理解spring boot的自动配置](https://www.cnblogs.com/sam-uncle/p/9111281.html)
+3、[spring boot 系列之六：深入理解spring boot的自动配置](https://www.cnblogs.com/sam-uncle/p/9111281.html)
+
+4、[@ConditionalOnBean和@ConditionalOnMissingBean注解默认情况](https://blog.csdn.net/killerofjava/article/details/104515684)
 
 

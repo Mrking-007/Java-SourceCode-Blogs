@@ -1,11 +1,8 @@
 
 # 1 前言
-本篇接
-[助力SpringBoot自动配置的条件注解ConditionalOnXXX分析--SpringBoot源码（三）](https://github.com/yuanmabiji/Java-SourceCode-Blogs/blob/master/SpringBoot/3%20%E5%8A%A9%E5%8A%9BSpringBoot%E8%87%AA%E5%8A%A8%E9%85%8D%E7%BD%AE%E7%9A%84%E6%9D%A1%E4%BB%B6%E6%B3%A8%E8%A7%A3%E5%8E%9F%E7%90%86%E6%8F%AD%E7%A7%98%20%20SpringBoot%E6%BA%90%E7%A0%81%EF%BC%88%E4%B8%89%EF%BC%89.md)
-
 温故而知新，我们来简单回顾一下上篇的内容，上一篇我们分析了SpringBoot的条件注解@ConditionalOnXxx的相关源码，现挑重点总结如下：
 1. SpringBoot的所有`@ConditionalOnXxx`的条件类`OnXxxCondition`都是继承于`SpringBootCondition`基类，而`SpringBootCondition`又实现了`Condition`接口。
-2. `SpringBootCondition`基类主要用来打印一些条件注解评估报告的日志,这些条件评估信息全部来源于其子类注解条件类`OnXxxCondition`，因此其也抽象了一个模板方法`getMatchOutcome`留给子类去实现来评估其条件注解是否符合条件。
+2. `SpringBootConditiony`基类主要用来打印一些条件注解评估报告的日志,这些条件评估信息全部来源于其子类注解条件类`OnXxxCondition`，因此其也抽象了一个模板方法`getMatchOutcome`留给子类去实现来评估其条件注解是否符合条件。
 3. 前一篇我们也还有一个重要的知识点还没分析，那就是跟过滤自动配置类逻辑有关的`AutoConfigurationImportFilter`接口，这篇文章我们来填一下这个坑。
 
 前面我们分析了跟SpringBoot的自动配置息息相关内置条件注解`@ConditionalOnXxx`后，现在我们就开始来撸SpringBoot自动配置的相关源码了。
@@ -29,6 +26,7 @@ public @interface SpringBootApplication {
 ```
 `@SpringBootApplication`标注了很多注解，我们可以看到其中跟SpringBoot自动配置有关的注解就有一个即`@EnableAutoConfiguration`，因此，可以肯定的是SpringBoot的自动配置肯定跟`@EnableAutoConfiguration`息息相关(其中`@ComponentScan`注解的`excludeFilters`属性也有一个类`AutoConfigurationExcludeFilter`,这个类跟自动配置也有点关系，但不是我们关注的重点)。
 现在我们来打开`@EnableAutoConfiguration`注解的源码：
+
 ```java
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -79,9 +77,26 @@ EnableAutoConfiguration=XxxAutoConfiguration
 
 先看一下`getImports`方法代码：
 ```java
-// ConfigurationClassParser.java
+// ConfigurationClassParser$DeferredImportSelectorGrouping.java
+private static class DeferredImportSelectorGrouping {
 
-public Iterable<Group.Entry> getImports() {
+		private final DeferredImportSelector.Group group;
+
+		private final List<DeferredImportSelectorHolder> deferredImports = new ArrayList<>();
+
+		DeferredImportSelectorGrouping(Group group) {
+			this.group = group;
+		}
+
+		public void add(DeferredImportSelectorHolder deferredImport) {
+			this.deferredImports.add(deferredImport);
+		}
+
+  	/**
+		 * Return the imports defined by the group.
+		 * @return each import with its associated configuration class
+		 */
+  public Iterable<Group.Entry> getImports() {
     // 遍历DeferredImportSelectorHolder对象集合deferredImports，deferredImports集合装了各种ImportSelector，当然这里装的是AutoConfigurationImportSelector
     for (DeferredImportSelectorHolder deferredImport : this.deferredImports) {
     	// 【1】，利用AutoConfigurationGroup的process方法来处理自动配置的相关逻辑，决定导入哪些配置类（这个是我们分析的重点，自动配置的逻辑全在这了）
@@ -91,18 +106,70 @@ public Iterable<Group.Entry> getImports() {
     // 【2】，经过上面的处理后，然后再进行选择导入哪些配置类
     return this.group.selectImports();
 }
+	}
 ```
 
 标`【1】`处的的代码是我们分析的**重中之重**，自动配置的相关的绝大部分逻辑全在这里了，将在<font color=blue>4.1 分析自动配置的主要逻辑</font>深入分析。那么`this.group.process(deferredImport.getConfigurationClass().getMetadata(),
     		deferredImport.getImportSelector())`；主要做的事情就是在`this.group`即`AutoConfigurationGroup`对象的`process`方法中，传入的`AutoConfigurationImportSelector`对象来选择一些符合条件的自动配置类，过滤掉一些不符合条件的自动配置类，就是这么个事情，无他。
-  
-  		
+
+
 注：
 
-1. `AutoConfigurationGroup`：是`AutoConfigurationImportSelector`的内部类，主要用来处理自动配置相关的逻辑，拥有`process`和`selectImports`方法，然后拥有`entries`和`autoConfigurationEntries`集合属性，这两个集合分别存储被处理后的符合条件的自动配置类，我们知道这些就足够了；
-2. `AutoConfigurationImportSelector`：承担自动配置的绝大部分逻辑，负责选择一些符合条件的自动配置类；
-3. `metadata`:标注在SpringBoot启动类上的`@SpringBootApplication`注解元数据
-    
+1. `AutoConfigurationImportSelector` 其实现了`DeferredImportSelector`接口； 
+
+2. ``AutoConfigurationGroup`是`AutoConfigurationImportSelector`的内部类，其实现了`DeferredImportSelector`内部接口`DeferredImportSelector.Group`
+
+   ```java
+   public interface DeferredImportSelector extends ImportSelector {
+   	/**
+   	 * Return a specific import group or {@code null} if no grouping is required.
+   	 * @return the import group class or {@code null}
+   	 */
+   	@Nullable
+   	default Class<? extends Group> getImportGroup() {
+   		return null;
+   	}
+   
+   	/**
+   	 * Interface used to group results from different import selectors.
+   	 */
+   	interface Group {
+   
+   		/**
+   		 * Process the {@link AnnotationMetadata} of the importing @{@link Configuration}
+   		 * class using the specified {@link DeferredImportSelector}.
+   		 */
+   		void process(AnnotationMetadata metadata, DeferredImportSelector selector);
+   
+   		/**
+   		 * Return the {@link Entry entries} of which class(es) should be imported for this
+   		 * group.
+   		 */
+   		Iterable<Entry> selectImports();
+   	}
+     ···
+   }
+   ```
+
+   ```java
+   public class AutoConfigurationImportSelector
+   		implements DeferredImportSelector, BeanClassLoaderAware, ResourceLoaderAware,
+   		BeanFactoryAware, EnvironmentAware, Ordered {
+         ····
+         private static class AutoConfigurationGroup implements DeferredImportSelector.Group,
+   			BeanClassLoaderAware, BeanFactoryAware, ResourceLoaderAware {
+           ···
+         }
+       }
+   ```
+
+3. 主要用来处理自动配置相关的逻辑，拥有`process`和`selectImports`方法，然后拥有`entries`和`autoConfigurationEntries`集合属性，这两个集合分别存储被处理后的符合条件的自动配置类，我们知道这些就足够了；
+
+4. `AutoConfigurationImportSelector`：承担自动配置的绝大部分逻辑，负责选择一些符合条件的自动配置类；
+
+5. `metadata`:标注在SpringBoot启动类上的`@SpringBootApplication`注解元数据
+
+
 标`【2】`的`this.group.selectImports`的方法主要是针对前面的`process`方法处理后的自动配置类再进一步有选择的选择导入，将在<font color=blue>4.2 有选择的导入自动配置类</font>这小节深入分析。
 
 
@@ -114,32 +181,113 @@ public Iterable<Group.Entry> getImports() {
 
 ```java
 // AutoConfigurationImportSelector$AutoConfigurationGroup.java
+private static class AutoConfigurationGroup implements DeferredImportSelector.Group,
+			BeanClassLoaderAware, BeanFactoryAware, ResourceLoaderAware {
 
-// 这里用来处理自动配置类，比如过滤掉不符合匹配条件的自动配置类
-public void process(AnnotationMetadata annotationMetadata,
-		DeferredImportSelector deferredImportSelector) {
-	Assert.state(
-			deferredImportSelector instanceof AutoConfigurationImportSelector,
-			() -> String.format("Only %s implementations are supported, got %s",
-					AutoConfigurationImportSelector.class.getSimpleName(),
-					deferredImportSelector.getClass().getName()));
-	// 【1】,调用getAutoConfigurationEntry方法得到自动配置类放入autoConfigurationEntry对象中
-	AutoConfigurationEntry autoConfigurationEntry = ((AutoConfigurationImportSelector) deferredImportSelector)
-			.getAutoConfigurationEntry(getAutoConfigurationMetadata(),
-					annotationMetadata);
-	// 【2】，又将封装了自动配置类的autoConfigurationEntry对象装进autoConfigurationEntries集合
-	this.autoConfigurationEntries.add(autoConfigurationEntry); 
-	// 【3】，遍历刚获取的自动配置类
-	for (String importClassName : autoConfigurationEntry.getConfigurations()) {
-		// 这里符合条件的自动配置类作为key，annotationMetadata作为值放进entries集合
-		this.entries.putIfAbsent(importClassName, annotationMetadata); 
+		private final Map<String, AnnotationMetadata> entries = new LinkedHashMap<>();
+
+		private final List<AutoConfigurationEntry> autoConfigurationEntries = new ArrayList<>();
+
+		private ClassLoader beanClassLoader;
+
+		private BeanFactory beanFactory;
+
+		private ResourceLoader resourceLoader;
+
+		private AutoConfigurationMetadata autoConfigurationMetadata;
+
+		@Override
+		public void setBeanClassLoader(ClassLoader classLoader) {
+			this.beanClassLoader = classLoader;
+		}
+
+		@Override
+		public void setBeanFactory(BeanFactory beanFactory) {
+			this.beanFactory = beanFactory;
+		}
+
+		@Override
+		public void setResourceLoader(ResourceLoader resourceLoader) {
+			this.resourceLoader = resourceLoader;
+		}
+
+		// 这里用来处理自动配置类，比如过滤掉不符合匹配条件的自动配置类
+		@Override
+		public void process(AnnotationMetadata annotationMetadata,
+							DeferredImportSelector deferredImportSelector) {
+			Assert.state(
+					deferredImportSelector instanceof AutoConfigurationImportSelector,
+					() -> String.format("Only %s implementations are supported, got %s",
+							AutoConfigurationImportSelector.class.getSimpleName(),
+							deferredImportSelector.getClass().getName()));
+			// 1,调用getAutoConfigurationEntry方法得到自动配置类放入autoConfigurationEntry对象中
+			AutoConfigurationEntry autoConfigurationEntry = ((AutoConfigurationImportSelector) deferredImportSelector)
+					.getAutoConfigurationEntry(getAutoConfigurationMetadata(), // 这里注意autoConfigurationMetadata和annotationMetadata的区别，autoConfigurationMetadata的properteis的键是自动配置类+条件注解类，值是条件注解类里面的属性值，TODO 唯一得注意的是有些自定义的配置类或加载配置类不在里面，这里不太明白
+							annotationMetadata); // annotationMetadata即的启动类标注有@SpringBootApplication的注解属性值
+			// 2，又将封装了自动配置类的autoConfigurationEntry对象装进autoConfigurationEntries集合
+			this.autoConfigurationEntries.add(autoConfigurationEntry);
+			// 3，遍历刚获取的自动配置类
+			for (String importClassName : autoConfigurationEntry.getConfigurations()) {
+				// 这里符合条件的自动配置类作为key，annotationMetadata作为值放进entries集合
+				this.entries.putIfAbsent(importClassName, annotationMetadata);
+			}
+		}
+
+		// selectImports这个方法在上面的process方法后面调用
+		@Override
+		public Iterable<Entry> selectImports() {
+			if (this.autoConfigurationEntries.isEmpty()) {
+				return Collections.emptyList();
+			}
+			// 这里得到所有要排除的自动配置类的set集合
+			Set<String> allExclusions = this.autoConfigurationEntries.stream()
+					.map(AutoConfigurationEntry::getExclusions)
+					.flatMap(Collection::stream).collect(Collectors.toSet());
+			// 这里得到经过滤后所有符合条件的自动配置类的set集合
+			Set<String> processedConfigurations = this.autoConfigurationEntries.stream()
+					.map(AutoConfigurationEntry::getConfigurations)
+					.flatMap(Collection::stream)
+					.collect(Collectors.toCollection(LinkedHashSet::new));
+			// 移除掉要排除的自动配置类
+			processedConfigurations.removeAll(allExclusions);
+			// 对标注有@Order注解的自动配置类进行排序，
+			return sortAutoConfigurations(processedConfigurations,
+					getAutoConfigurationMetadata())
+					.stream()
+					.map((importClassName) -> new Entry(
+							this.entries.get(importClassName), importClassName))
+					.collect(Collectors.toList());
+		}
+
+		private AutoConfigurationMetadata getAutoConfigurationMetadata() {
+			if (this.autoConfigurationMetadata == null) {
+				this.autoConfigurationMetadata = AutoConfigurationMetadataLoader
+						.loadMetadata(this.beanClassLoader);
+			}
+			return this.autoConfigurationMetadata;
+		}
+
+		private List<String> sortAutoConfigurations(Set<String> configurations,
+													AutoConfigurationMetadata autoConfigurationMetadata) {
+			return new AutoConfigurationSorter(getMetadataReaderFactory(),
+					autoConfigurationMetadata).getInPriorityOrder(configurations);
+		}
+
+		private MetadataReaderFactory getMetadataReaderFactory() {
+			try {
+				return this.beanFactory.getBean(
+						SharedMetadataReaderFactoryContextInitializer.BEAN_NAME,
+						MetadataReaderFactory.class);
+			} catch (NoSuchBeanDefinitionException ex) {
+				return new CachingMetadataReaderFactory(this.resourceLoader);
+			}
+		}
+
 	}
-}
 ```
-上面代码中我们再来看标`【1】`的方法`getAutoConfigurationEntry`，这个方法主要是用来获取自动配置类有关，承担了自动配置的主要逻辑。直接上代码：
+上面代码中我们再来看标`【1】`的方法`getAutoConfigurationEntry(这里内部类AutoConfigurationGroup方法的参数是是外部类的实例的多态接口，在内部类中使用所在外部类的实例调用外部类的成员方法)，是这个方法主要是用来获取自动配置类有关，承担了自动配置的主要逻辑。直接上代码：
 ```java
 // AutoConfigurationImportSelector.java
-
 // 获取符合条件的自动配置类，避免加载不必要的自动配置类从而造成内存浪费
 protected AutoConfigurationEntry getAutoConfigurationEntry(
 		AutoConfigurationMetadata autoConfigurationMetadata,
@@ -259,31 +407,35 @@ private List<String> filter(List<String> configurations,
 ## 4.2 有选择的导入自动配置类
 这里继续深究前面<font color=Blue> 4 分析SpringBoot自动配置原理</font>这节标`【2】`处的
 `this.group.selectImports`方法是如何进一步有选择的导入自动配置类的。直接看代码：
+
 ```java
 // AutoConfigurationImportSelector$AutoConfigurationGroup.java
-
-public Iterable<Entry> selectImports() {
-	if (this.autoConfigurationEntries.isEmpty()) {
-		return Collections.emptyList();
-	} 
-	// 这里得到所有要排除的自动配置类的set集合
-	Set<String> allExclusions = this.autoConfigurationEntries.stream()
-			.map(AutoConfigurationEntry::getExclusions)
-			.flatMap(Collection::stream).collect(Collectors.toSet());
-	// 这里得到经过滤后所有符合条件的自动配置类的set集合
-	Set<String> processedConfigurations = this.autoConfigurationEntries.stream() 
-			.map(AutoConfigurationEntry::getConfigurations)
-			.flatMap(Collection::stream)
-			.collect(Collectors.toCollection(LinkedHashSet::new));
-	// 移除掉要排除的自动配置类
-	processedConfigurations.removeAll(allExclusions); 
-	// 对标注有@Order注解的自动配置类进行排序，
-	return sortAutoConfigurations(processedConfigurations,
-			getAutoConfigurationMetadata())
-					.stream()
-					.map((importClassName) -> new Entry(
-							this.entries.get(importClassName), importClassName))
-					.collect(Collectors.toList());
+private static class AutoConfigurationGroup implements DeferredImportSelector.Group,
+BeanClassLoaderAware, BeanFactoryAware, ResourceLoaderAware {
+      ······
+      public Iterable<Entry> selectImports() {
+        if (this.autoConfigurationEntries.isEmpty()) {
+          return Collections.emptyList();
+        } 
+        // 这里得到所有要排除的自动配置类的set集合
+        Set<String> allExclusions = this.autoConfigurationEntries.stream()
+            .map(AutoConfigurationEntry::getExclusions)
+            .flatMap(Collection::stream).collect(Collectors.toSet());
+        // 这里得到经过滤后所有符合条件的自动配置类的set集合
+        Set<String> processedConfigurations = this.autoConfigurationEntries.stream() 
+            .map(AutoConfigurationEntry::getConfigurations)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        // 移除掉要排除的自动配置类
+        processedConfigurations.removeAll(allExclusions); 
+        // 对标注有@Order注解的自动配置类进行排序，
+        return sortAutoConfigurations(processedConfigurations,
+            getAutoConfigurationMetadata())
+                .stream()
+                .map((importClassName) -> new Entry(
+                    this.entries.get(importClassName), importClassName))
+                .collect(Collectors.toList());
+      }
 }
 ```
 可以看到，`selectImports`方法主要是针对经过排除掉`exclude`的和被`AutoConfigurationImportFilter`接口过滤后的满足条件的自动配置类再进一步排除`exclude`的自动配置类，然后再排序。逻辑很简单，不再详述。
@@ -319,35 +471,38 @@ public interface AutoConfigurationImportFilter {
 
 ```java
 // FilteringSpringBootCondition.java
-
-@Override
-public boolean[] match(String[] autoConfigurationClasses,
-		AutoConfigurationMetadata autoConfigurationMetadata) {
-	// 创建评估报告
-	ConditionEvaluationReport report = ConditionEvaluationReport
-			.find(this.beanFactory);
-	// 注意getOutcomes是模板方法，将spring.factories文件种加载的所有自动配置类传入
-	// 子类（这里指的是OnClassCondition,OnBeanCondition和OnWebApplicationCondition类）去过滤
-	// 注意outcomes数组存储的是不匹配的结果，跟autoConfigurationClasses数组一一对应
-	/*****************************【主线，重点关注】*********************************************/
-	ConditionOutcome[] outcomes = getOutcomes(autoConfigurationClasses,
-			autoConfigurationMetadata);
-	boolean[] match = new boolean[outcomes.length];
-	// 遍历outcomes,这里outcomes为null则表示匹配，不为null则表示不匹配
-	for (int i = 0; i < outcomes.length; i++) {
-		ConditionOutcome outcome = outcomes[i];
-		match[i] = (outcome == null || outcome.isMatch());
-		if (!match[i] && outcomes[i] != null) {
-			// 这里若有某个类不匹配的话，此时调用父类SpringBootCondition的logOutcome方法打印日志
-			logOutcome(autoConfigurationClasses[i], outcomes[i]);
-			// 并将不匹配情况记录到report
-			if (report != null) {
-				report.recordConditionEvaluation(autoConfigurationClasses[i], this,
-						outcomes[i]);
-			}
-		}
-	}
-	return match;
+abstract class FilteringSpringBootCondition extends SpringBootCondition
+		implements AutoConfigurationImportFilter, BeanFactoryAware, BeanClassLoaderAware {
+  	······
+      @Override
+      public boolean[] match(String[] autoConfigurationClasses,
+          AutoConfigurationMetadata autoConfigurationMetadata) {
+        // 创建评估报告
+        ConditionEvaluationReport report = ConditionEvaluationReport
+            .find(this.beanFactory);
+        // 注意getOutcomes是模板方法，将spring.factories文件种加载的所有自动配置类传入
+        // 子类（这里指的是OnClassCondition,OnBeanCondition和OnWebApplicationCondition类）去过滤
+        // 注意outcomes数组存储的是不匹配的结果，跟autoConfigurationClasses数组一一对应
+        /*****************************【主线，重点关注】*********************************************/
+        ConditionOutcome[] outcomes = getOutcomes(autoConfigurationClasses,
+            autoConfigurationMetadata);
+        boolean[] match = new boolean[outcomes.length];
+        // 遍历outcomes,这里outcomes为null则表示匹配，不为null则表示不匹配
+        for (int i = 0; i < outcomes.length; i++) {
+          ConditionOutcome outcome = outcomes[i];
+          match[i] = (outcome == null || outcome.isMatch());
+          if (!match[i] && outcomes[i] != null) {
+            // 这里若有某个类不匹配的话，此时调用父类SpringBootCondition的logOutcome方法打印日志
+            logOutcome(autoConfigurationClasses[i], outcomes[i]);
+            // 并将不匹配情况记录到report
+            if (report != null) {
+              report.recordConditionEvaluation(autoConfigurationClasses[i], this,
+                  outcomes[i]);
+            }
+          }
+        }
+        return match;
+      }
 }
 ```
 `FilteringSpringBootCondition`的`match`方法主要做的事情还是调用抽象模板方法`getOutcomes`来根据条件来过滤自动配置类，而复写`getOutcomes`模板方法的有三个子类，这里不再一一分析，**只挑选`OnClassCondition`复写的`getOutcomes`方法进行分析。**
@@ -356,34 +511,37 @@ public boolean[] match(String[] autoConfigurationClasses,
 先直接上`OnClassCondition`复写的`getOutcomes`方法的代码：
 ```java
 // OnClassCondition.java
-
-protected final ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
-		AutoConfigurationMetadata autoConfigurationMetadata) {
-	// Split the work and perform half in a background thread. Using a single
-	// additional thread seems to offer the best performance. More threads make
-	// things worse
-	// 这里经过测试用两个线程去跑的话性能是最好的，大于两个线程性能反而变差
-	int split = autoConfigurationClasses.length / 2;
-	// 【1】开启一个新线程去扫描判断已经加载的一半自动配置类
-	OutcomesResolver firstHalfResolver = createOutcomesResolver(
-			autoConfigurationClasses, 0, split, autoConfigurationMetadata);
-	// 【2】这里用主线程去扫描判断已经加载的一半自动配置类
-	OutcomesResolver secondHalfResolver = new StandardOutcomesResolver(
-			autoConfigurationClasses, split, autoConfigurationClasses.length,
-			autoConfigurationMetadata, getBeanClassLoader());
-	// 【3】先让主线程去执行解析一半自动配置类是否匹配条件
-	ConditionOutcome[] secondHalf = secondHalfResolver.resolveOutcomes();
-	// 【4】这里用新开启的线程取解析另一半自动配置类是否匹配
-	// 注意为了防止主线程执行过快结束，resolveOutcomes方法里面调用了thread.join()来
-	// 让主线程等待新线程执行结束，因为后面要合并两个线程的解析结果
-	ConditionOutcome[] firstHalf = firstHalfResolver.resolveOutcomes();
-	// 新建一个ConditionOutcome数组来存储自动配置类的筛选结果
-	ConditionOutcome[] outcomes = new ConditionOutcome[autoConfigurationClasses.length];
-	// 将前面两个线程的筛选结果分别拷贝进outcomes数组
-	System.arraycopy(firstHalf, 0, outcomes, 0, firstHalf.length);
-	System.arraycopy(secondHalf, 0, outcomes, split, secondHalf.length);
-	// 返回自动配置类的筛选结果
-	return outcomes;
+@Order(Ordered.HIGHEST_PRECEDENCE)
+class OnClassCondition extends FilteringSpringBootCondition {
+  ······
+      protected final ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
+          AutoConfigurationMetadata autoConfigurationMetadata) {
+        // Split the work and perform half in a background thread. Using a single
+        // additional thread seems to offer the best performance. More threads make
+        // things worse
+        // 这里经过测试用两个线程去跑的话性能是最好的，大于两个线程性能反而变差
+        int split = autoConfigurationClasses.length / 2;
+        // 【1】开启一个新线程去扫描判断已经加载的一半自动配置类
+        OutcomesResolver firstHalfResolver = createOutcomesResolver(
+            autoConfigurationClasses, 0, split, autoConfigurationMetadata);
+        // 【2】这里用主线程去扫描判断已经加载的一半自动配置类
+        OutcomesResolver secondHalfResolver = new StandardOutcomesResolver(
+            autoConfigurationClasses, split, autoConfigurationClasses.length,
+            autoConfigurationMetadata, getBeanClassLoader());
+        // 【3】先让主线程去执行解析一半自动配置类是否匹配条件
+        ConditionOutcome[] secondHalf = secondHalfResolver.resolveOutcomes();
+        // 【4】这里用新开启的线程取解析另一半自动配置类是否匹配
+        // 注意为了防止主线程执行过快结束，resolveOutcomes方法里面调用了thread.join()来
+        // 让主线程等待新线程执行结束，因为后面要合并两个线程的解析结果
+        ConditionOutcome[] firstHalf = firstHalfResolver.resolveOutcomes();
+        // 新建一个ConditionOutcome数组来存储自动配置类的筛选结果
+        ConditionOutcome[] outcomes = new ConditionOutcome[autoConfigurationClasses.length];
+        // 将前面两个线程的筛选结果分别拷贝进outcomes数组
+        System.arraycopy(firstHalf, 0, outcomes, 0, firstHalf.length);
+        System.arraycopy(secondHalf, 0, outcomes, split, secondHalf.length);
+        // 返回自动配置类的筛选结果
+        return outcomes;
+      }
 }
 ```
 可以看到，`OnClassCondition`的`getOutcomes`方法主要解析自动配置类是否符合匹配条件，当然这个匹配条件指自动配置类上的注解`@ConditionalOnClass`指定的类存不存在于`classpath`中，存在则返回匹配，不存在则返回不匹配。
@@ -396,29 +554,28 @@ protected final ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses
 这里对应前面<font color=blue>5.1节</font>的代码注释标注`【1】`处的`OutcomesResolver firstHalfResolver = createOutcomesResolver(...);`的方法：
 
 ```java
-// OnClassCondition.java
+    // OnClassCondition.java
+      private OutcomesResolver createOutcomesResolver(String[] autoConfigurationClasses,
+          int start, int end, AutoConfigurationMetadata autoConfigurationMetadata) {
+        // 新建一个StandardOutcomesResolver对象
+        OutcomesResolver outcomesResolver = new StandardOutcomesResolver(
+            autoConfigurationClasses, start, end, autoConfigurationMetadata,
+            getBeanClassLoader());
+        try {
+          // new一个ThreadedOutcomesResolver对象，并将StandardOutcomesResolver类型的outcomesResolver对象作为构造器参数传入
+          return new ThreadedOutcomesResolver(outcomesResolver);
+        }
+        // 若上面开启的线程抛出AccessControlException异常，则返回StandardOutcomesResolver对象
+        catch (AccessControlException ex) {
+          return outcomesResolver;
+        }
+      }
 
-private OutcomesResolver createOutcomesResolver(String[] autoConfigurationClasses,
-		int start, int end, AutoConfigurationMetadata autoConfigurationMetadata) {
-	// 新建一个StandardOutcomesResolver对象
-	OutcomesResolver outcomesResolver = new StandardOutcomesResolver(
-			autoConfigurationClasses, start, end, autoConfigurationMetadata,
-			getBeanClassLoader());
-	try {
-		// new一个ThreadedOutcomesResolver对象，并将StandardOutcomesResolver类型的outcomesResolver对象作为构造器参数传入
-		return new ThreadedOutcomesResolver(outcomesResolver);
-	}
-	// 若上面开启的线程抛出AccessControlException异常，则返回StandardOutcomesResolver对象
-	catch (AccessControlException ex) {
-		return outcomesResolver;
-	}
-}
 ```
 可以看到`createOutcomesResolver`方法创建了一个封装了`StandardOutcomesResolver`类的`ThreadedOutcomesResolver`解析对象。
 我们再来看下`ThreadedOutcomesResolver`这个线程解析类封装`StandardOutcomesResolver`这个对象的目的是什么？我们继续跟进代码：
 ```java
 // OnClassCondtion.java
-
 private ThreadedOutcomesResolver(OutcomesResolver outcomesResolver) {
 	// 这里开启一个新的线程，这个线程其实还是利用StandardOutcomesResolver的resolveOutcomes方法
 	// 对自动配置类进行解析判断是否匹配
@@ -439,41 +596,42 @@ private ThreadedOutcomesResolver(OutcomesResolver outcomesResolver) {
 这里`StandardOutcomesResolver.resolveOutcomes`方法承担了解析自动配置类匹配与否的全部逻辑，是我们要重点分析的方法，`resolveOutcomes`方法最终把解析的自动配置类的结果赋给`secondHalf`数组。那么它是如何解析自动配置类是否匹配条件的呢？
 ```java
 // OnClassCondition$StandardOutcomesResolver.java
+private final class StandardOutcomesResolver implements OutcomesResolver {
+      public ConditionOutcome[] resolveOutcomes() {
+        // 再调用getOutcomes方法来解析
+        return getOutcomes(this.autoConfigurationClasses, this.start, this.end,
+            this.autoConfigurationMetadata);
+      }
 
-public ConditionOutcome[] resolveOutcomes() {
-	// 再调用getOutcomes方法来解析
-	return getOutcomes(this.autoConfigurationClasses, this.start, this.end,
-			this.autoConfigurationMetadata);
-}
-
-private ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
-		int start, int end, AutoConfigurationMetadata autoConfigurationMetadata) { // 只要autoConfigurationMetadata没有存储相关自动配置类，那么outcome默认为null，则说明匹配
-	ConditionOutcome[] outcomes = new ConditionOutcome[end - start];
-	// 遍历每一个自动配置类
-	for (int i = start; i < end; i++) {
-		String autoConfigurationClass = autoConfigurationClasses[i];
-		// TODO 对于autoConfigurationMetadata有个疑问：为何有些自动配置类的条件注解能被加载到autoConfigurationMetadata，而有些又不能，比如自己定义的一个自动配置类HelloWorldEnableAutoConfiguration就没有被存到autoConfigurationMetadata中
-		if (autoConfigurationClass != null) {
-			// 这里取出注解在AutoConfiguration自动配置类类的@ConditionalOnClass注解的指定类的全限定名，
-			// 举个栗子，看下面的KafkaStreamsAnnotationDrivenConfiguration这个自动配置类
-			/**
-			 * @ConditionalOnClass(StreamsBuilder.class)
-			 * class KafkaStreamsAnnotationDrivenConfiguration {
-			 * // 省略无关代码
-			 * }
-			 */
-			// 那么取出的就是StreamsBuilder类的全限定名即candidates = org.apache.kafka.streams.StreamsBuilder
-			String candidates = autoConfigurationMetadata
-					.get(autoConfigurationClass, "ConditionalOnClass"); // 因为这里是处理某个类是否存在于classpath中，所以传入的key是ConditionalOnClass
-			// 若自动配置类标有ConditionalOnClass注解且有值，此时调用getOutcome判断是否存在于类路径中
-			if (candidates != null) {
-				// 拿到自动配置类注解@ConditionalOnClass的值后，再调用getOutcome方法去判断匹配结果,若该类存在于类路径，则getOutcome返回null，否则非null
-				/*******************【主线，重点关注】******************/
-				outcomes[i - start] = getOutcome(candidates);
-			}
-		}
-	}
-	return outcomes;
+      private ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
+          int start, int end, AutoConfigurationMetadata autoConfigurationMetadata) { // 只要autoConfigurationMetadata没有存储相关自动配置类，那么outcome默认为null，则说明匹配
+        ConditionOutcome[] outcomes = new ConditionOutcome[end - start];
+        // 遍历每一个自动配置类
+        for (int i = start; i < end; i++) {
+          String autoConfigurationClass = autoConfigurationClasses[i];
+          // TODO 对于autoConfigurationMetadata有个疑问：为何有些自动配置类的条件注解能被加载到autoConfigurationMetadata，而有些又不能，比如自己定义的一个自动配置类HelloWorldEnableAutoConfiguration就没有被存到autoConfigurationMetadata中
+          if (autoConfigurationClass != null) {
+            // 这里取出注解在AutoConfiguration自动配置类类的@ConditionalOnClass注解的指定类的全限定名，
+            // 举个栗子，看下面的KafkaStreamsAnnotationDrivenConfiguration这个自动配置类
+            /**
+             * @ConditionalOnClass(StreamsBuilder.class)
+             * class KafkaStreamsAnnotationDrivenConfiguration {
+             * // 省略无关代码
+             * }
+             */
+            // 那么取出的就是StreamsBuilder类的全限定名即candidates = org.apache.kafka.streams.StreamsBuilder
+            String candidates = autoConfigurationMetadata
+                .get(autoConfigurationClass, "ConditionalOnClass"); // 因为这里是处理某个类是否存在于classpath中，所以传入的key是ConditionalOnClass
+            // 若自动配置类标有ConditionalOnClass注解且有值，此时调用getOutcome判断是否存在于类路径中
+            if (candidates != null) {
+              // 拿到自动配置类注解@ConditionalOnClass的值后，再调用getOutcome方法去判断匹配结果,若该类存在于类路径，则getOutcome返回null，否则非null
+              /*******************【主线，重点关注】******************/
+              outcomes[i - start] = getOutcome(candidates);
+            }
+          }
+        }
+        return outcomes;
+      }
 }
 ```
 可以看到`StandardOutcomesResolver.resolveOutcomes`的方法中再次调用`getOutcomes`方法，主要是从`autoConfigurationMetadata`对象中获取到自动配置类上的注解`@ConditionalOnClass`指定的类的全限定名，然后作为参数传入`getOutcome`方法用于去类路径加载该类，若能加载到则说明注解`@ConditionalOnClass`满足条件，此时说明自动配置类匹配成功。
@@ -482,7 +640,6 @@ private ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
 
 ```java
 // OnClassCondition$StandardOutcomesResolver.java
-
 // 返回的outcome记录的是不匹配的情况，不为null，则说明不匹配；为null，则说明匹配
 private ConditionOutcome getOutcome(String candidates) {
 	// candidates的形式为“org.springframework.boot.autoconfigure.aop.AopAutoConfiguration.ConditionalOnClass=org.aspectj.lang.annotation.Aspect,org.aspectj.lang.reflect.Advice,org.aspectj.weaver.AnnotatedElement”
@@ -514,7 +671,6 @@ private ConditionOutcome getOutcome(String candidates) {
 
 ```java
 // OnClassCondition$StandardOutcomesResolver.java
-
 private ConditionOutcome getOutcome(String className,
 		ClassNameFilter classNameFilter, ClassLoader classLoader) {
 	// 调用classNameFilter的matches方法来判断`@ConditionalOnClass`指定的类存不存在类路径中
@@ -531,8 +687,7 @@ private ConditionOutcome getOutcome(String className,
 
 我们继续跟进`ClassNameFilter`的源码：
 ```java
-// FilteringSpringBootCondition.java
-
+// FilteringSpringBootCondition.java 类结构定义参见上方5
 protected enum ClassNameFilter {
 	// 这里表示指定的类存在于类路径中，则返回true
 	PRESENT {
@@ -592,17 +747,18 @@ protected enum ClassNameFilter {
 
 ```java
 // OnClassCondition$ThreadedOutcomesResolver.java
-
-public ConditionOutcome[] resolveOutcomes() {
-	try {
-		// 调用子线程的Join方法，让主线程等待
-		this.thread.join();
-	}
-	catch (InterruptedException ex) {
-		Thread.currentThread().interrupt();
-	}
-	// 若子线程结束后，此时返回子线程的解析结果
-	return this.outcomes;
+private static final class ThreadedOutcomesResolver implements OutcomesResolver {
+      public ConditionOutcome[] resolveOutcomes() {
+        try {
+          // 调用子线程的Join方法，让主线程等待
+          this.thread.join();
+        }
+        catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+        }
+        // 若子线程结束后，此时返回子线程的解析结果
+        return this.outcomes;
+      }
 }
 ```
 可以看到用了`Thread.join()`方法来让主线程等待正在解析自动配置类的子线程，这里应该也可以用`CountDownLatch`来让主线程等待子线程结束。最终将子线程解析后的结果赋给`firstHalf`数组。
@@ -647,18 +803,32 @@ private void fireAutoConfigurationImportEvents(List<String> configurations,
 此时我们再来看下`ConditionEvaluationReportAutoConfigurationImportListener`监听器监听到事件后，它的`onAutoConfigurationImportEvent`方法究竟做了哪些事情：
 ```java
 // ConditionEvaluationReportAutoConfigurationImportListener.java
+class ConditionEvaluationReportAutoConfigurationImportListener
+		implements AutoConfigurationImportListener, BeanFactoryAware {
 
-public void onAutoConfigurationImportEvent(AutoConfigurationImportEvent event) {
-	if (this.beanFactory != null) {
-		// 获取到条件评估报告器对象
-		ConditionEvaluationReport report = ConditionEvaluationReport
-				.get(this.beanFactory);
-		// 将符合条件的自动配置类记录到unconditionalClasses集合中
-		report.recordEvaluationCandidates(event.getCandidateConfigurations());
-		// 将要exclude的自动配置类记录到exclusions集合中
-		report.recordExclusions(event.getExclusions()); 
+	private ConfigurableListableBeanFactory beanFactory;
+
+	@Override
+	public void onAutoConfigurationImportEvent(AutoConfigurationImportEvent event) {
+		if (this.beanFactory != null) {
+			// 获取到条件评估报告器对象
+			ConditionEvaluationReport report = ConditionEvaluationReport
+					.get(this.beanFactory);
+			// 将符合条件的自动配置类记录到unconditionalClasses集合中
+			report.recordEvaluationCandidates(event.getCandidateConfigurations());
+			// 将要exclude的自动配置类记录到exclusions集合中
+			report.recordExclusions(event.getExclusions());
+		}
 	}
+
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+		this.beanFactory = (beanFactory instanceof ConfigurableListableBeanFactory)
+				? (ConfigurableListableBeanFactory) beanFactory : null;
+	}
+
 }
+
 ```
 可以看到，`ConditionEvaluationReportAutoConfigurationImportListener`监听器监听到事件后，做的事情很简单，只是分别记录下符合条件和被`exclude`的自动配置类。
 
@@ -673,23 +843,25 @@ public void onAutoConfigurationImportEvent(AutoConfigurationImportEvent event) {
 public @interface AutoConfigurationPackage {
 }
 ```
-可以看到`@AutoConfigurationPackage`注解是跟SpringBoot自动配置所在的包相关的，即将 添加该注解的类所在的package 作为 自动配置package 进行管理。
+可以看到`@AutoConfigurationPackage`注解是跟SpringBoot自动配置所在的包相关的，**即将添加该注解的类所在的package作为自动配置package 进行管理**。
 
 接下来我们再看看`AutoConfigurationPackages.Registrar`类是干嘛的，直接看源码：
 ```java
 //AutoConfigurationPackages.Registrar.java
+public abstract class AutoConfigurationPackages {
+      ······
+      static class Registrar implements ImportBeanDefinitionRegistrar, DeterminableImports {
+          @Override
+          public void registerBeanDefinitions(AnnotationMetadata metadata,
+              BeanDefinitionRegistry registry) {
+            register(registry, new PackageImport(metadata).getPackageName());
+          }
 
-static class Registrar implements ImportBeanDefinitionRegistrar, DeterminableImports {
-    @Override
-    public void registerBeanDefinitions(AnnotationMetadata metadata,
-    		BeanDefinitionRegistry registry) {
-    	register(registry, new PackageImport(metadata).getPackageName());
-    }
-    
-    @Override
-    public Set<Object> determineImports(AnnotationMetadata metadata) {
-    	return Collections.singleton(new PackageImport(metadata));
-    }
+          @Override
+          public Set<Object> determineImports(AnnotationMetadata metadata) {
+            return Collections.singleton(new PackageImport(metadata));
+          }
+      }
 }
 ```
 
@@ -715,8 +887,8 @@ public static void register(BeanDefinitionRegistry registry, String... packageNa
 	}
 }
 ```
-如上，可以看到`register`方法注册了一个`packageNames`即自动配置类注解`@EnableAutoConfiguration`所在的所在的包名相关的`bean`。那么注册这个`bean`的目的是为了什么呢？
-结合官网注释知道，注册这个自动配置包名相关的`bean`是为了被其他地方引用，比如`JPA entity scanner`，具体拿来干什么久不知道了，这里不再深究了。 
+如上，可以看到`register`方法注册了一个`packageNames`即自动配置类注解`@EnableAutoConfiguration`所在的包名相关的`bean`。那么注册这个`bean`的目的是为了什么呢？
+结合官网注释知道，注册这个自动配置包名相关的`bean`是为了被其他地方引用，比如`JPA entity scanner`，具体拿来干什么就不知道了，这里不再深究了。 
 
 
 # 8 小结
@@ -750,4 +922,6 @@ public static void register(BeanDefinitionRegistry registry, String... packageNa
 
 1，[@AutoConfigurationPackage注解](https://blog.csdn.net/ttyy1112/article/details/101284541)
 
+2, 目前全文主体涉及这些类或接口
 
+![image-20200629005005729](/Users/zhangyuhang/Library/Application Support/typora-user-images/image-20200629005005729.png)
